@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>DATABEND - Obscure Edition (Normalized)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#121212;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+:root{--accent:#0d7377;--muted:#242424}
+.app{height:100%;display:grid;grid-template-rows:60px 1fr 40px;gap:0}
+
+/* Header */
+.header{background:#1a1a1a;border-bottom:1px solid #333;padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:18px;font-weight:600;letter-spacing:1px}
+.header-center{display:flex;gap:10px;align-items:center}
+.header-center .btn{padding:8px 14px;font-size:12px;font-weight:600;border-radius:4px;cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;background:var(--accent);border:none;color:#fff}
+.header-center .btn.secondary{background:#424242;color:#e0e0e0}
+.header-center .btn.secondary:hover{background:#505050}
+.header-center .btn:hover{background:#14a085}
+.header-right{display:flex;gap:16px;align-items:center;font-size:12px;color:#888}
+
+/* Main layout */
+.main{display:grid;grid-template-columns:1fr 360px;overflow:hidden}
+.canvas-area{background:#0a0a0a;position:relative;overflow:hidden;border-right:1px solid #333}
+#canvas,#overlay{width:100%;height:100%;display:block;touch-action:none;position:absolute;top:0;left:0}
+
+/* Panel */
+.panel{background:#1a1a1a;border-left:1px solid #333;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}
+.panel-header{padding:16px;border-bottom:1px solid #333;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#999}
+.panel-content{overflow-y:auto;padding:16px}
+.panel-content::-webkit-scrollbar{width:6px}
+.panel-content::-webkit-scrollbar-thumb{background:#333;border-radius:3px}
+.section{margin-bottom:20px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#999;margin-bottom:10px}
+.btn{padding:10px 14px;background:var(--accent);border:none;color:#fff;font-size:12px;font-weight:600;border-radius:4px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.5px}
+.btn:hover{background:#14a085}
+.btn-secondary{background:#424242}
+.btn-secondary:hover{background:#505050}
+.btn-danger{background:#d32f2f}
+.btn-danger:hover{background:#f32c1e}
+.btn-group{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.control-label{font-size:11px;color:#999;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px;display:block}
+input[type=range]{width:100%;height:4px;background:#2a2a2a;border:none;border-radius:2px;-webkit-appearance:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer}
+input[type=number],select,input[type=text]{width:100%;padding:8px;background:#242424;border:1px solid #333;color:#e0e0e0;font-size:12px;border-radius:4px}
+.display{background:var(--muted);border:1px solid #333;padding:8px;border-radius:4px;font-size:11px;color:#aaa;font-family:monospace}
+.note{font-size:11px;color:#888;margin-top:8px}
+
+/* Progress bar */
+#glitchProgressWrap{position:absolute;left:0;right:0;bottom:12px;height:60px;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:40}
+#glitchProgress{pointer-events:auto;width:94%;max-width:1000px;height:46px;background:rgba(13,115,119,0.08);border:2px solid rgba(13,115,119,0.35);border-radius:8px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;opacity:0;transform:translateY(16px) scale(0.96);transition:opacity .22s ease,transform .28s cubic-bezier(.2,.9,.3,1);color:#cfeeea;position:relative;font-family:"Courier New",monospace}
+#glitchProgress.show{opacity:1;transform:translateY(0) scale(1)}
+.progress-bar-fill{position:absolute;left:0;top:0;height:100%;background:linear-gradient(90deg,rgba(13,115,119,0.9),rgba(13,115,119,0.6));width:0%;transition:width .15s ease-out}
+.progress-bar-text{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-weight:700;color:#e6f9f7;text-shadow:0 0 4px rgba(13,115,119,0.8)}
+.footer{background:#1a1a1a;border-top:1px solid #333;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:11px;color:#666}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">DATABEND</div>
+    <div class="header-center">
+      <button class="btn" id="playBtn">Play</button>
+      <button class="btn secondary" id="stopBtn">Stop</button>
+      <button class="btn secondary" id="exportBtn">Export</button>
+    </div>
+    <div class="header-right"><span id="status">Ready</span></div>
+  </div>
+
+  <div class="main">
+    <div class="canvas-area">
+      <canvas id="canvas"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="glitchProgressWrap"><div id="glitchProgress"><div class="progress-bar-fill" id="progressBarFill"></div><div class="progress-bar-text" id="progressBarText">0%</div></div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">Controls</div>
+      <div class="panel-content">
+
+        <!-- File -->
+        <div class="section">
+          <div class="section-title">File</div>
+          <button class="btn" id="loadBtn" style="width:100%">Load Audio</button>
+          <div class="display" id="fileInfo" style="margin-top:8px">No file loaded</div>
+        </div>
+
+        <!-- Databend -->
+        <div class="section">
+          <div class="section-title">Databend</div>
+          <label class="control-label">Intensity</label>
+          <input type="range" id="intensity" min="0" max="100" value="50">
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="bitcrushBtn">BitCrush</button>
+            <button class="btn" id="foldBtn">Fold</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="shiftBtn">Shift</button>
+            <button class="btn" id="invertBtn">Invert</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="randomBtn">Random</button>
+            <button class="btn btn-danger" id="corruptBtn">Corrupt</button>
+          </div>
+        </div>
+
+        <!-- Glitch -->
+        <div class="section">
+          <div class="section-title">Glitch</div>
+          <label class="control-label">Chunk Size</label>
+          <input type="number" id="chunkSize" value="512" min="4" step="4">
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="granularBtn">Granular</button>
+            <button class="btn" id="stutterBtn">Stutter</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="reverseBtn">Reverse</button>
+            <button class="btn" id="scrambleBtn">Scramble</button>
+          </div>
+        </div>
+
+        <!-- Obscure -->
+        <div class="section">
+          <div class="section-title">Obscure</div>
+          <div class="btn-group">
+            <button class="btn" id="ringBtn">Ring Mod</button>
+            <button class="btn" id="warpBtn">Bit Warp</button>
+          </div>
+          <div style="margin-top:8px" class="btn-group">
+            <button class="btn" id="chebyBtn">Chebyshev</button>
+            <button class="btn" id="combBtn">Feedback</button>
+          </div>
+          <button class="btn" id="smearBtn" style="margin-top:8px;width:100%">Spectral Smear</button>
+          <div class="note">These act like Databend: destructive, work on selection or whole buffer, push to history, stop playback during processing.</div>
+        </div>
+
+        <!-- History -->
+        <div class="section">
+          <div class="section-title">History</div>
+          <div class="btn-group">
+            <button class="btn secondary" id="undoBtn">Undo</button>
+            <button class="btn secondary" id="redoBtn">Redo</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="footer"><div id="duration">0.00s</div><div>DATABEND - Obscure Audio Bender</div></div>
+</div>
+
+<script>
+/* ======= DOM refs ======= */
+const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay'), octx = overlay.getContext('2d');
+
+const loadBtn = document.getElementById('loadBtn');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const exportBtn = document.getElementById('exportBtn');
+
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+
+const bitcrushBtn = document.getElementById('bitcrushBtn');
+const foldBtn = document.getElementById('foldBtn');
+const shiftBtn = document.getElementById('shiftBtn');
+const invertBtn = document.getElementById('invertBtn');
+const randomBtn = document.getElementById('randomBtn');
+const corruptBtn = document.getElementById('corruptBtn');
+
+const granularBtn = document.getElementById('granularBtn');
+const stutterBtn = document.getElementById('stutterBtn');
+const reverseBtn = document.getElementById('reverseBtn');
+const scrambleBtn = document.getElementById('scrambleBtn');
+
+const ringBtn = document.getElementById('ringBtn');
+const warpBtn = document.getElementById('warpBtn');
+const smearBtn = document.getElementById('smearBtn');
+// NEW Obscure Buttons
+const chebyBtn = document.getElementById('chebyBtn');
+const combBtn = document.getElementById('combBtn');
+
+const intensityEl = document.getElementById('intensity');
+const chunkSizeEl = document.getElementById('chunkSize');
+
+const statusEl = document.getElementById('status');
+const fileInfoEl = document.getElementById('fileInfo');
+const durationEl = document.getElementById('duration');
+
+const glitchBox = document.getElementById('glitchProgress');
+const progressBarFill = document.getElementById('progressBarFill');
+const progressBarText = document.getElementById('progressBarText');
+
+/* ======= Audio / State ======= */
+let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let original = null;
+let current = null;
+let history = [];
+let historyIndex = -1;
+
+let playing = false;
+let playSource = null;
+let playStartTime = 0;
+let playOffset = 0;
+let playLoopActive = false;
+let loopStart = 0;
+let loopEnd = 0;
+
+const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#0d7377';
+
+/* ======= Init ======= */
+function init(){
+  resizeCanvases();
+  window.addEventListener('resize', resizeCanvases);
+  requestAnimationFrame(drawLoop);
+  intensityEl.addEventListener('input', ()=>{ /* just visual control for now */ });
+
+  setupOverlayInteraction();
+}
+init();
+
+/* ======= Canvas sizing ======= */
+function resizeCanvases(){
+  ctx.setTransform(1,0,0,1,0,0);
+  canvas.width = canvas.offsetWidth * devicePixelRatio;
+  canvas.height = canvas.offsetHeight * devicePixelRatio;
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+
+  octx.setTransform(1,0,0,1,0,0);
+  overlay.width = overlay.offsetWidth * devicePixelRatio;
+  overlay.height = overlay.offsetHeight * devicePixelRatio;
+  octx.scale(devicePixelRatio, devicePixelRatio);
+}
+
+/* ======= Helpers ======= */
+function setStatus(text, ms=1200){
+  statusEl.textContent = text;
+  if(ms>0){ clearTimeout(setStatus._t); setStatus._t = setTimeout(()=>{ if(statusEl.textContent===text) statusEl.textContent='Ready'; }, ms); }
+}
+
+/* ======= File loading ======= */
+loadBtn.onclick = () => {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'audio/*';
+  inp.onchange = async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    setStatus('Loading...');
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const ab = ev.target.result;
+        if(audioCtx.state==='suspended') await audioCtx.resume();
+        const decoded = await new Promise((res,rej)=>audioCtx.decodeAudioData(ab.slice(0),res,rej));
+        const ch = decoded.numberOfChannels;
+        const len = decoded.length;
+        const samp = new Float32Array(len);
+        if(ch===1) samp.set(decoded.getChannelData(0));
+        else {
+          const L = decoded.getChannelData(0), R = decoded.getChannelData(1);
+          for(let i=0;i<len;i++) samp[i]=(L[i]+R[i])*0.5;
+        }
+        original = samp;
+        current = samp.slice();
+        history = [];
+        historyIndex = -1;
+        updateUI();
+        saveState();
+        setStatus('Loaded',800);
+      } catch(err){
+        console.error(err); setStatus('Error decoding',2000);
+      }
+    };
+    reader.onerror = (err) => { console.error(err); setStatus('Read error',2000); };
+    reader.readAsArrayBuffer(file);
+  };
+  inp.click();
+};
+
+/* ======= Conversions ======= */
+function f32ToInt16Buffer(float32){
+  const buf = new ArrayBuffer(float32.length*2);
+  const dv = new DataView(buf);
+  let o=0;
+  for(let i=0;i<float32.length;i++){
+    let v=Math.max(-1,Math.min(1,float32[i]));
+    dv.setInt16(o, v<0? v*0x8000 : v*0x7FFF, true);
+    o+=2;
+  }
+  return buf;
+}
+function int16BufferToF32(buf){
+  const dv=new DataView(buf);
+  const len=dv.byteLength/2;
+  const out=new Float32Array(len);
+  let o=0;
+  for(let i=0;i<len;i++){ out[i]=dv.getInt16(o,true)/0x7FFF; o+=2; }
+  return out;
+}
+
+/* ======= History ======= */
+function saveState(){ if(!current) return; history = history.slice(0,historyIndex+1); history.push(current.slice()); historyIndex++; if(history.length>40){ history.shift(); historyIndex--; } setStatus('Saved',700); }
+undoBtn.onclick = ()=>{ if(historyIndex>0){ historyIndex--; current=history[historyIndex].slice(); updateUI(); setStatus('Undo'); } else setStatus('Nothing to undo',600); };
+redoBtn.onclick = ()=>{ if(historyIndex<history.length-1){ historyIndex++; current=history[historyIndex].slice(); updateUI(); setStatus('Redo'); } else setStatus('Nothing to redo',600); };
+
+/* ======= Progress UI ======= */
+let progressState = { fraction:0, label:'' };
+function renderProgress(){ const percent = Math.round((progressState.fraction||0)*100); progressBarFill.style.width = percent + '%'; progressBarText.textContent = percent + '%'; }
+function glitchProgressStart(label='Processing…', duration=900){
+  progressState.label = label; progressState.fraction = 0;
+  glitchBox.classList.add('show');
+  renderProgress();
+  const start = performance.now();
+  function tick(now){
+    const t = now - start;
+    const frac = Math.min(1, t / duration);
+    progressState.fraction = frac;
+    renderProgress();
+    if(frac < 1) requestAnimationFrame(tick);
+    else setTimeout(()=>{ glitchBox.classList.remove('show'); }, 120);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ======= Playback helpers ======= */
+function stopPlaybackSilent(){
+  if(playSource){ try{ playSource.stop(); } catch(e){} try{ playSource.disconnect(); } catch(e){} playSource=null; }
+  playing=false;
+  playBtn.textContent = 'Play';
+}
+
+/* ======= Core applybend with peak normalization ======= */
+function applybend(fn, opts={duration:900}){
+  if(!current) { setStatus('Load a file first', 800); return; }
+
+  if(playing) stopPlaybackSilent();
+  saveState();
+
+  const sr = audioCtx.sampleRate;
+  const hasLoop = loopEnd > loopStart && (loopEnd - loopStart) > 0.02;
+  const startSample = hasLoop ? Math.floor(loopStart * sr) : 0;
+  const endSample = hasLoop ? Math.floor(loopEnd * sr) : current.length;
+
+  glitchProgressStart((opts.label||'Processing...'), opts.duration || 900);
+
+  setTimeout(() => {
+    try {
+      const region = current.slice(startSample, endSample);
+      const buf = f32ToInt16Buffer(region);
+      const dv = new DataView(buf);
+
+      let oldPeak = 1e-9;
+      for(let i=0;i<region.length;i++){ const a = Math.abs(region[i]); if(a>oldPeak) oldPeak=a; }
+      oldPeak = Math.max(oldPeak, 1e-6);
+
+      const out = fn(dv, region, { startSample, endSample, sr, intensity: parseInt(intensityEl.value||50) });
+
+      let processed;
+      if (out && out instanceof Float32Array) {
+        processed = out;
+      } else {
+        processed = int16BufferToF32(buf);
+      }
+
+      let newPeak = 1e-9;
+      for(let i=0;i<processed.length;i++){ const a = Math.abs(processed[i]); if(a>newPeak) newPeak=a; }
+      newPeak = Math.max(newPeak, 1e-6);
+      const scale = oldPeak / newPeak;
+      
+      if (isFinite(scale) && Math.abs(scale - 1) > 0.001) {
+        for (let i = 0; i < processed.length; i++) processed[i] *= scale;
+      }
+
+      for(let i=0;i<processed.length;i++){
+        if(processed[i] > 1.0) processed[i] = 1.0;
+        else if(processed[i] < -1.0) processed[i] = -1.0;
+      }
+
+      current.set(processed, startSample);
+
+      updateUI();
+      setStatus('Processed', 900);
+    } catch (err) {
+      console.error('applybend err', err);
+      setStatus('Error', 1200);
+    }
+  }, 24);
+}
+
+/* ======= Databend operations ======= */
+bitcrushBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const bits = Math.max(1, 16 - Math.floor(intensity / 6));
+  const mask = (0xFFFF << (16 - bits)) & 0xFFFF;
+  for(let i=0;i<dv.byteLength;i+=2){ const v = dv.getInt16(i,true); dv.setInt16(i, v & mask, true); }
+}, {label:'BitCrushing…', duration:900});
+
+foldBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const folds = Math.max(1, Math.floor(intensity / 10));
+  for(let i=0;i<dv.byteLength;i+=2){
+    let v = dv.getInt16(i,true);
+    for(let f=0;f<folds;f++){
+      if(v>0) v = 0x7FFF - v;
+      else v = -0x8000 - v;
+    }
+    dv.setInt16(i, v, true);
+  }
+}, {label:'Folding…', duration:1100});
+
+shiftBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const shift = Math.floor(intensity / 5);
+  for(let i=0;i<dv.byteLength;i+=2){
+    let v = dv.getInt16(i,true);
+    v = Math.max(-0x8000, Math.min(0x7FFF, v << shift));
+    dv.setInt16(i,v,true);
+  }
+}, {label:'Shifting…', duration:800});
+
+invertBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const arr = new Uint8Array(dv.buffer);
+  const chance = intensity / 100;
+  for(let i=0;i<arr.length;i++){ if(Math.random() < chance) arr[i] = (~arr[i]) & 0xFF; }
+}, {label:'Inverting…', duration:700});
+
+randomBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const chance = intensity / 100;
+  for(let i=0;i<dv.byteLength;i++){ if(Math.random() < chance) dv.setUint8(i, Math.floor(Math.random()*256)); }
+}, {label:'Randomizing…', duration:650});
+
+corruptBtn.onclick = ()=> applybend((dv, region, ctx)=> {
+  const intensity = ctx.intensity;
+  const numCorrupt = Math.floor((dv.byteLength / 100) * intensity);
+  for(let i=0;i<numCorrupt;i++){ const idx = Math.floor(Math.random()*dv.byteLength); dv.setUint8(idx, Math.floor(Math.random()*256)); }
+}, {label:'Corrupting…', duration:1200});
+
+/* ======= Glitch ops ======= */
+granularBtn.onclick = ()=> {
+  if(!current) return setStatus('Load a file first',800);
+  const chunk = Math.max(4, parseInt(chunkSizeEl.value)||512);
+  applybend((dv, region, ctx) => {
+    const regionToProcess = region;
+    const out = new Float32Array(regionToProcess.length);
+    const chunks = Math.max(1, Math.floor(regionToProcess.length / chunk));
+    for(let i=0;i<regionToProcess.length;i++){
+      const gIdx = Math.floor(Math.random()*chunks)*chunk;
+      out[i] = regionToProcess[Math.min(gIdx + (i%chunk), regionToProcess.length-1)];
+    }
+    return out;
+  }, {label:'Granularizing…', duration:900});
+};
+
+stutterBtn.onclick = ()=> {
+  if(!current) return setStatus('Load a file first',800);
+  const chunk = Math.max(4, parseInt(chunkSizeEl.value)||512);
+  applybend((dv, region, ctx) => {
+    const regionToProcess = region;
+    const out = new Float32Array(regionToProcess.length);
+    for(let i=0;i<regionToProcess.length;i++){
+      const chunkIdx = Math.floor(i/chunk);
+      const chunkStart = chunkIdx * chunk;
+      out[i] = regionToProcess[Math.min(chunkStart, regionToProcess.length-1)];
+    }
+    return out;
+  }, {label:'Stuttering…', duration:700});
+};
+
+reverseBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const r = region.slice(); r.reverse(); return r;
+}, {label:'Reversing…', duration:420});
+
+scrambleBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const chunk = Math.max(4, parseInt(chunkSizeEl.value)||512);
+  const regionToProcess = region.slice();
+  const out = regionToProcess.slice();
+  for(let i=0;i<out.length;i+=chunk){
+    const end = Math.min(i+chunk, out.length);
+    const section = out.slice(i,end);
+    for(let j=section.length-1;j>0;j--){ const k = Math.floor(Math.random()*(j+1)); [section[j], section[k]] = [section[k], section[j]]; }
+    out.set(section, i);
+  }
+  return out;
+}, {label:'Scrambling…', duration:950});
+
+/* ======= Obscure processors ======= */
+ringBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const inten = ctx.intensity;
+  const baseFreq = 40 + Math.pow(inten/100, 2) * 4000;
+  const sr = ctx.sr;
+  const out = new Float32Array(region.length);
+  const modDepth = 0.5 + (inten/100)*0.8;
+  const modRate = 0.3 + (inten/100)*6.0;
+  for(let i=0;i<region.length;i++){
+    const t = i / sr;
+    const mod = Math.sin(2*Math.PI*modRate*t) * modDepth;
+    const carrierFreq = baseFreq * (1 + mod*0.5);
+    const sine = Math.sin(2*Math.PI*carrierFreq*t);
+    out[i] = region[i] * sine;
+  }
+  return out;
+}, {label:'Ring Modulating…', duration:1000});
+
+warpBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const inten = ctx.intensity / 100;
+  const out = new Float32Array(region.length);
+  const warp = 1 + inten * 9;
+  for(let i=0;i<region.length;i++){
+    const x = region[i];
+    const s = Math.sign(x) * (1 - Math.exp(-Math.abs(x) * warp));
+    out[i] = Math.tanh(s * (1 + inten*2));
+  }
+  return out;
+}, {label:'Bit Warping…', duration:900});
+
+smearBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const sr = ctx.sr;
+  const len = region.length;
+  const windowSize = Math.max(256, Math.floor((ctx.intensity/100) * 2048));
+  const hop = Math.floor(windowSize / 2);
+  const out = new Float32Array(len);
+  const win = new Float32Array(windowSize);
+  for(let i=0;i<windowSize;i++) win[i] = 0.5 * (1 - Math.cos(2*Math.PI*i/(windowSize-1)));
+  const tmpAccum = new Float32Array(len);
+  const tmpCounts = new Float32Array(len);
+  for(let pos=0; pos < len; pos += hop){
+    const buf = new Float32Array(windowSize);
+    for(let i=0;i<windowSize;i++){
+      const idx = Math.min(len-1, pos + i);
+      buf[i] = region[idx] * win[i];
+    }
+    const bands = 8;
+    const bandSize = Math.floor(windowSize / bands);
+    const bandBuf = new Float32Array(windowSize);
+    for(let b=0;b<bands;b++){
+      const start = b * bandSize;
+      const end = Math.min(windowSize, start + bandSize);
+      let mag = 0;
+      for(let k=start;k<end;k++) mag += Math.abs(buf[k]);
+      mag /= (end - start);
+      const jitter = Math.floor((Math.random()-0.5) * (ctx.intensity/100) * bandSize);
+      for(let k=start;k<end;k++){
+        const target = k + jitter;
+        if(target>=0 && target<windowSize) bandBuf[target] += buf[k] * 0.9;
+      }
+    }
+    for(let i=0;i<windowSize;i++){
+      const idx = Math.min(len-1, pos + i);
+      tmpAccum[idx] += bandBuf[i] * win[i];
+      tmpCounts[idx] += win[i];
+    }
+  }
+  for(let i=0;i<len;i++){
+    if(tmpCounts[i] > 0) out[i] = tmpAccum[i] / tmpCounts[i];
+    else out[i] = region[i];
+  }
+  const mix = Math.min(1, ctx.intensity/100);
+  for(let i=0;i<len;i++) out[i] = out[i]*mix + region[i]*(1-mix);
+  return out;
+}, {label:'Spectral Smearing…', duration:1100});
+
+// =================================================================
+// START: NEW OBSCURE PROCESSORS
+// =================================================================
+
+// Chebyshev Waveshaper: Creates new harmonics using Chebyshev polynomials.
+chebyBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const inten = ctx.intensity;
+  const order = 2 + Math.floor(inten / 100 * 14); // Order from 2 to 16
+  const mix = 0.2 + (inten / 100) * 0.8;
+  const out = new Float32Array(region.length);
+
+  for (let i = 0; i < region.length; i++) {
+    const x = region[i];
+    let T_prev = 1;
+    let T_curr = x;
+    // Iteratively calculate the polynomial
+    for (let k = 1; k < order; k++) {
+      let T_next = 2 * x * T_curr - T_prev;
+      T_prev = T_curr;
+      T_curr = T_next;
+    }
+    out[i] = (x * (1 - mix)) + (T_curr * mix);
+  }
+  return out;
+}, {label:'Chebyshev Warping…', duration: 950});
+
+// Feedback Comb Filter: Creates a resonant drone.
+combBtn.onclick = ()=> applybend((dv, region, ctx) => {
+  const inten = ctx.intensity;
+  const sr = ctx.sr;
+  // Intensity controls feedback amount (up to just below 1.0 to prevent explosion)
+  const feedbackGain = 0.5 + (inten / 100) * 0.49;
+  // Intensity also controls the resonant frequency
+  const freq = 60 + Math.pow(inten / 100, 3) * 3000;
+  const delaySamples = Math.floor(sr / freq);
+
+  const out = new Float32Array(region.length);
+  for (let i = 0; i < region.length; i++) {
+    const delayedSample = out[i - delaySamples] || 0; // Get sample from our OWN output buffer
+    out[i] = region[i] + feedbackGain * delayedSample;
+  }
+  return out;
+}, {label:'Adding Feedback…', duration: 800});
+
+// =================================================================
+// END: NEW OBSCURE PROCESSORS
+// =================================================================
+
+
+/* ======= Duplicate Loop Feature ======= */
+function duplicateLoop() {
+  if (!current) {
+    setStatus('Load a file first', 800);
+    return;
+  }
+  const hasLoop = loopEnd > loopStart && (loopEnd - loopStart) > 0.02;
+  if (!hasLoop) {
+    setStatus('Select a loop to duplicate', 1000);
+    return;
+  }
+  if (playing) stopPlaybackSilent();
+  saveState();
+
+  const sr = audioCtx.sampleRate;
+  const startSample = Math.floor(loopStart * sr);
+  const endSample = Math.floor(loopEnd * sr);
+  const loopDurationSamples = endSample - startSample;
+
+  const partBeforeLoopEnd = current.slice(0, endSample);
+  const loopData = current.slice(startSample, endSample);
+  const partAfterLoopEnd = current.slice(endSample);
+
+  const newLength = current.length + loopDurationSamples;
+  const newBuffer = new Float32Array(newLength);
+
+  newBuffer.set(partBeforeLoopEnd, 0);
+  newBuffer.set(loopData, endSample);
+  newBuffer.set(partAfterLoopEnd, endSample + loopDurationSamples);
+
+  current = newBuffer;
+
+  const loopDurationSeconds = loopDurationSamples / sr;
+  loopStart = loopEnd;
+  loopEnd = loopStart + loopDurationSeconds;
+
+  updateUI();
+  setStatus('Loop duplicated', 900);
+}
+
+/* ======= Playback ======= */
+function stopPlayback(){
+  if(playSource){
+    try{ playSource.stop(); } catch(e) {}
+    try{ playSource.disconnect(); } catch(e){}
+    playSource = null;
+  }
+  playing = false;
+  playBtn.textContent = 'Play';
+  setStatus('Stopped',600);
+}
+
+async function startPlayback(at=0){
+  stopPlaybackSilent();
+
+  if(!current) return setStatus('No file',800);
+  if(audioCtx.state==='suspended') await audioCtx.resume();
+
+  const buf = audioCtx.createBuffer(1, current.length, audioCtx.sampleRate);
+  buf.getChannelData(0).set(current);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+
+  src.connect(audioCtx.destination);
+
+  if(loopEnd > loopStart && loopEnd - loopStart > 0.02){
+    src.loop = true;
+    src.loopStart = loopStart;
+    src.loopEnd = loopEnd;
+    playLoopActive = true;
+    src.start(0, at >= loopEnd ? loopStart : at);
+  } else {
+    src.loop = false;
+    playLoopActive = false;
+    src.start(0, at);
+  }
+
+  playSource = src;
+  playing = true;
+  playStartTime = audioCtx.currentTime;
+  playOffset = at;
+  playBtn.textContent = 'Playing...';
+
+  src.onended = () => {
+    if (src === playSource && !playLoopActive) {
+      playing = false;
+      playBtn.textContent = 'Play';
+      setStatus('Playback ended', 800);
+    }
+  };
+}
+
+playBtn.onclick = async () => {
+  if(playing){ 
+    stopPlayback(); 
+    return; 
+  }
+  const pos = lastPlayheadPos || 0;
+  await startPlayback(pos);
+};
+stopBtn.onclick = stopPlayback;
+
+/* ======= Overlay interaction ======= */
+let isDragging=false, dragStartX=0, dragCurrentX=0, pointerDown=false, isDraggingLoopEdge=false, draggingEdge=null;
+let lastPlayheadPos = 0;
+
+function setupOverlayInteraction(){
+  overlay.addEventListener('pointerdown', (ev) => {
+    if(!current) return;
+    overlay.setPointerCapture(ev.pointerId);
+    pointerDown = true;
+    const rect = overlay.getBoundingClientRect();
+    const x = (ev.clientX - rect.left);
+    dragStartX = x;
+    dragCurrentX = x;
+    isDragging = true;
+    const [sx, ex] = loopPixels();
+    const edgeTolerance = 8;
+    if(sx && Math.abs(x - sx) < edgeTolerance){ isDraggingLoopEdge = true; draggingEdge='start'; }
+    else if(ex && Math.abs(x - ex) < edgeTolerance){ isDraggingLoopEdge = true; draggingEdge='end'; }
+    else isDraggingLoopEdge = false;
+  });
+
+  overlay.addEventListener('pointermove', (ev) => {
+    const rect = overlay.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, ev.clientX - rect.left));
+    if(!pointerDown){
+      lastPlayheadPos = xToTime(x);
+      drawOverlay();
+      return;
+    }
+    dragCurrentX = x;
+    if(isDragging){
+      if(isDraggingLoopEdge){
+        const t = xToTime(x);
+        if(draggingEdge==='start'){ loopStart = Math.max(0, Math.min(loopEnd - 0.02, t)); }
+        else { loopEnd = Math.min(durationSeconds(), Math.max(loopStart + 0.02, t)); }
+      }
+      drawOverlay();
+    }
+  });
+
+  overlay.addEventListener('pointerup', (ev) => {
+    if(!pointerDown) return;
+    pointerDown = false;
+    overlay.releasePointerCapture(ev.pointerId);
+    const rect = overlay.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, ev.clientX - rect.left));
+    
+    if(isDraggingLoopEdge){
+      isDraggingLoopEdge=false; 
+      draggingEdge=null;
+      if(loopEnd - loopStart > 0.02){
+        startPlayback(loopStart);
+      }
+    } else {
+      const a = dragStartX, b = dragCurrentX;
+      if(Math.abs(b - a) < 6){
+        const t = xToTime(x);
+        lastPlayheadPos = t;
+        startPlayback(t);
+      } else {
+        const t1 = xToTime(a), t2 = xToTime(b);
+        loopStart = Math.min(t1,t2); 
+        loopEnd = Math.max(t1,t2);
+        if(loopEnd - loopStart < 0.02) loopEnd = Math.min(durationSeconds(), loopStart + 0.02);
+        startPlayback(loopStart);
+      }
+    }
+    isDragging = false; 
+    drawOverlay();
+  });
+
+  overlay.addEventListener('dblclick', ()=>{ loopStart = 0; loopEnd = 0; drawOverlay(); });
+  overlay.addEventListener('pointercancel', ()=>{ pointerDown=false; isDragging=false; isDraggingLoopEdge=false; drawOverlay(); });
+}
+
+function xToTime(x){
+  const rect = overlay.getBoundingClientRect();
+  const w = rect.width || 1;
+  const frac = Math.max(0, Math.min(1, x / w));
+  return frac * durationSeconds();
+}
+function timeToX(time){
+  const rect = overlay.getBoundingClientRect();
+  const w = rect.width || 1;
+  return (time / Math.max(0.0001, durationSeconds())) * w;
+}
+function durationSeconds(){ return current ? (current.length / audioCtx.sampleRate) : 0; }
+function loopPixels(){ if(!current || loopEnd<=loopStart) return [null,null]; const rect=overlay.getBoundingClientRect(); return [ timeToX(loopStart), timeToX(loopEnd) ]; }
+
+/* ======= Overlay & Waveform drawing ======= */
+function drawOverlay(){
+  const w = overlay.width / devicePixelRatio;
+  const h = overlay.height / devicePixelRatio;
+  octx.clearRect(0,0,w,h);
+
+  if(loopEnd > loopStart && current){
+    const sx = timeToX(loopStart), ex = timeToX(loopEnd);
+    const width = Math.max(2, ex - sx);
+    octx.save();
+    octx.fillStyle = hexToRGBA(accent,0.06);
+    octx.fillRect(sx, 0, width, h);
+    octx.lineWidth = 2;
+    octx.strokeStyle = accent;
+    octx.shadowColor = accent;
+    octx.shadowBlur = 12;
+    octx.strokeRect(sx+1, 1, Math.max(1,width-2), h-2);
+    octx.restore();
+  }
+
+  if(isDragging && !isDraggingLoopEdge && pointerDown){
+    const a = dragStartX, b = dragCurrentX;
+    const sx = Math.min(a,b), ex = Math.max(a,b);
+    octx.save();
+    octx.fillStyle = hexToRGBA(accent,0.05);
+    octx.fillRect(sx, 0, Math.max(1,ex-sx), h);
+    octx.lineWidth = 1.6;
+    octx.strokeStyle = accent;
+    octx.setLineDash([6,6]);
+    octx.strokeRect(sx+1, 1, Math.max(1,ex-sx-2), h-2);
+    octx.restore();
+  }
+
+  let playPos = lastPlayheadPos;
+  if (playing) {
+    const elapsed = audioCtx.currentTime - playStartTime;
+    let posSec = playOffset + elapsed;
+    if (playLoopActive && loopEnd > loopStart) {
+      const loopLen = loopEnd - loopStart;
+      posSec = loopStart + ((posSec - loopStart) % loopLen);
+    } else {
+      posSec = posSec % Math.max(0.0001, durationSeconds());
+    }
+    playPos = posSec;
+    lastPlayheadPos = posSec;
+  }
+
+  if(current){
+    const x = timeToX(playPos);
+    octx.save();
+    octx.strokeStyle = '#fff';
+    octx.lineWidth = 1;
+    octx.globalAlpha = 0.95;
+    octx.beginPath();
+    octx.moveTo(x, 0);
+    octx.lineTo(x, overlay.height / devicePixelRatio);
+    octx.stroke();
+    octx.restore();
+  }
+}
+
+function hexToRGBA(hex, a=1){
+  const h = hex.replace('#','');
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function drawWaveform(){
+  const w = canvas.width / devicePixelRatio;
+  const h = canvas.height / devicePixelRatio;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0,0,w,h);
+  if(!current) return;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2;
+  const step = Math.max(2, Math.floor(current.length / w));
+  for(let x=0; x<w; x++){
+    const i = Math.floor((x * current.length) / w);
+    let min = 1, max = -1;
+    for(let j=0;j<step && i+j<current.length;j++){
+      const v = current[i+j];
+      if(v < min) min = v;
+      if(v > max) max = v;
+    }
+    const y1 = ((max + 1)/2) * h;
+    const y2 = ((min + 1)/2) * h;
+    ctx.fillStyle = accent;
+    ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+  }
+}
+
+let lastDrawTime = 0;
+function drawLoop(ts){
+  if(!lastDrawTime || ts - lastDrawTime > 16){
+    drawWaveform();
+    drawOverlay();
+    lastDrawTime = ts;
+  }
+  requestAnimationFrame(drawLoop);
+}
+
+/* ======= Keyboard shortcuts ======= */
+document.addEventListener('keydown', async (e) => {
+  if(e.code === 'Space') e.preventDefault();
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const cmd = isMac ? e.metaKey : e.ctrlKey;
+  if (cmd && e.key.toLowerCase() === 'z') { undoBtn.click(); return; }
+  if (cmd && e.key.toLowerCase() === 'y') { redoBtn.click(); return; }
+  if (cmd && (e.key.toLowerCase() === 's')) { e.preventDefault(); exportBtn.click(); return; }
+  if (cmd && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateLoop(); return; }
+  if (e.code === 'Space') { playBtn.click(); return; }
+});
+
+/* ======= Export ======= */
+function floatTo16(arr){
+  const buf = new ArrayBuffer(arr.length*2);
+  const dv = new DataView(buf);
+  let o=0;
+  for(let i=0;i<arr.length;i++){
+    let s = Math.max(-1,Math.min(1,arr[i]));
+    dv.setInt16(o, s<0? s*0x8000 : s*0x7FFF, true);
+    o+=2;
+  }
+  return buf;
+}
+function writeWAV(float32Array, sr){
+  const wavBuffer = floatTo16(float32Array);
+  const buffer = new ArrayBuffer(44 + wavBuffer.byteLength);
+  const view = new DataView(buffer);
+  const writeString = (offset, string) => { for(let i=0;i<string.length;i++) view.setUint8(offset+i, string.charCodeAt(i)); };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + wavBuffer.byteLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sr, true);
+  view.setUint32(28, sr * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, wavBuffer.byteLength, true);
+  const pcmView = new Uint8Array(wavBuffer);
+  for(let i=0;i<pcmView.length;i++) view.setUint8(44+i, pcmView[i]);
+  return new Blob([view], {type:'audio/wav'});
+}
+
+// Simplified Export - No more real-time effects to bake
+exportBtn.onclick = async () => {
+  if(!current) return setStatus('Load a file first',800);
+  glitchProgressStart('Exporting…', 600);
+  setTimeout(() => {
+    try {
+      const wav = writeWAV(current, audioCtx.sampleRate);
+      const url = URL.createObjectURL(wav);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'databend_export.wav';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus('Exported',1000);
+      glitchProgressStart('Done', 200);
+    } catch(e){
+      console.error(e); setStatus('Export failed',1200);
+    }
+  }, 250);
+};
+
+
+/* ======= UI update ======= */
+function updateUI(){
+  if(!current){ durationEl.textContent='0.00s'; fileInfoEl.textContent='No file loaded'; return; }
+  const dur = (current.length / audioCtx.sampleRate).toFixed(2);
+  durationEl.textContent = dur + 's';
+  fileInfoEl.textContent = `${(current.length/1000).toFixed(0)}k samples`;
+}
+
+/* ======= final housekeeping ======= */
+window.addEventListener('beforeunload', () => { /* nothing saved */ });
+
+/* initial render */
+updateUI();
+
+</script>
+</body>
+</html>
